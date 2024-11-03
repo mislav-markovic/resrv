@@ -1,0 +1,34 @@
+<!DOCTYPE html>
+
+<html lang="en">
+
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Static Serve</title>
+  <link href="css/style.css" rel="stylesheet">
+</head>
+
+<body>
+  <h1>Hello World</h1>
+  <p>Lorem Ipsum</p>
+
+
+  <script>
+    console.log("hello from js");
+
+    console.log("opening ws");
+    const websocket = new WebSocket("ws://localhost:3001/notifyreload");
+
+    websocket.onopen = (event) => {
+      console.log("ws open");
+    };
+
+    websocket.onmessage = (event) => {
+      console.log("ws recv: " + event.data);
+    };
+
+  </script>
+</body>
+
+</html>
