@@ -51,10 +51,16 @@ async fn ws_handler(ws: WebSocketUpgrade) -> impl IntoResponse {
     ws.on_upgrade(move |socket| handle_socket(socket))
 }
 
-async fn handle_socket(mut socket: WebSocket) {
+async fn handle_socket(mut socket: WebSocket, ) {
     if socket.send(Message::Ping(vec![1, 2, 3])).await.is_ok() {
         info!("Pinged ws client");
     } else {
         error!("Failed to ping ws client");
     }
+}
+
+enum ReloadEvent {
+    Stylesheet,
+    Html
+
 }
