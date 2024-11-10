@@ -7,7 +7,12 @@ use axum::{
     routing::any,
     Router,
 };
-use std::net::SocketAddr;
+use eyre::OptionExt;
+use resrv::config;
+use std::{
+    net::{SocketAddr, ToSocketAddrs},
+    path::Path,
+};
 use tower_http::{services::ServeDir, trace::TraceLayer};
 use tracing::{debug, error, info};
 use tracing_subscriber::{layer::SubscriberExt, util::SubscriberInitExt};
@@ -23,17 +28,27 @@ async fn main() {
         .with(tracing_subscriber::fmt::layer())
         .init();
 
-    serve(make_router(), 3001).await;
+    let cfg = config::load_cfg().unwrap();
+    let addr: SocketAddr = cfg
+        .url
+        .to_socket_addrs()
+        .unwrap()
+        .next()
+        .ok_or_eyre("failed to resolve url to socket addr")
+        .unwrap();
+
+    info!("serve cfg: {:?}", cfg);
+
+    serve(make_router(&cfg.dir), addr).await;
 }
 
-fn make_router() -> Router {
+fn make_router(dir: &Path) -> Router {
     Router::new()
-        .fallback_service(ServeDir::new("assets").append_index_html_on_directories(true))
+        .fallback_service(ServeDir::new(dir).append_index_html_on_directories(true))
         .route("/notifyreload", any(ws_handler))
 }
 
-async fn serve(app: Router, port: u16) {
-    let addr = SocketAddr::from(([127, 0, 0, 1], port));
+async fn serve(app: Router, addr: SocketAddr) {
     let listener = tokio::net::TcpListener::bind(addr).await.unwrap();
 
     debug!("listening on {}", listener.local_addr().unwrap());
@@ -51,16 +66,10 @@ async fn ws_handler(ws: WebSocketUpgrade) -> impl IntoResponse {
     ws.on_upgrade(move |socket| handle_socket(socket))
 }
 
-async fn handle_socket(mut socket: WebSocket, ) {
+async fn handle_socket(mut socket: WebSocket) {
     if socket.send(Message::Ping(vec![1, 2, 3])).await.is_ok() {
         info!("Pinged ws client");
     } else {
         error!("Failed to ping ws client");
     }
-}
-
-enum ReloadEvent {
-    Stylesheet,
-    Html
-
 }
