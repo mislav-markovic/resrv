@@ -8,7 +8,7 @@ use axum::{
     Router,
 };
 use eyre::OptionExt;
-use resrv::config;
+use resrv::{asset_tracker, config};
 use std::{
     net::{SocketAddr, ToSocketAddrs},
     path::Path,
@@ -38,6 +38,9 @@ async fn main() {
         .unwrap();
 
     info!("serve cfg: {:?}", cfg);
+
+    info!("starting asset tracker");
+    let _tracker = asset_tracker::AssetTracker::new_for_dir(&cfg.dir);
 
     serve(make_router(&cfg.dir), addr).await;
 }
