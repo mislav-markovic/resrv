@@ -17,6 +17,7 @@ pub struct Config {
 
 impl Config {
     pub fn new(url: String, dir: PathBuf) -> Self {
+        let dir = std::fs::canonicalize(dir).unwrap();
         Self { url, dir }
     }
 }
