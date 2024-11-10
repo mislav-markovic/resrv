@@ -1,14 +1,17 @@
 use axum::{
     extract::{
         ws::{Message, WebSocket},
-        WebSocketUpgrade,
+        State, WebSocketUpgrade,
     },
     response::IntoResponse,
     routing::any,
     Router,
 };
 use eyre::OptionExt;
-use resrv::{asset_tracker, config};
+use resrv::{
+    asset_tracker::{self, AssetTracker, ReloadEvent},
+    config,
+};
 use std::{
     net::{SocketAddr, ToSocketAddrs},
     path::Path,
@@ -38,15 +41,50 @@ async fn main() {
         .unwrap();
 
     info!("cfg: {:?}", cfg);
-    let _tracker = asset_tracker::AssetTracker::new_for_dir(&cfg.dir);
+    let tracker = asset_tracker::AssetTracker::new_for_dir(&cfg.dir);
+    let (tx, rx) = tokio::sync::watch::channel(ReloadEvent::FileChange);
 
-    serve(make_router(&cfg.dir), addr).await;
+    let tracker_task = tokio::spawn(broadcast_asset_change(tracker, tx));
+
+    serve(make_router(&cfg.dir, rx), addr).await;
+    let _ = tracker_task.await;
 }
 
-fn make_router(dir: &Path) -> Router {
+type TrackerTx = tokio::sync::watch::Sender<ReloadEvent>;
+type TrackerRx = tokio::sync::watch::Receiver<ReloadEvent>;
+
+fn make_router(dir: &Path, rx: TrackerRx) -> Router {
+    let state = TrackerState { rx };
     Router::new()
         .fallback_service(ServeDir::new(dir).append_index_html_on_directories(true))
         .route("/notifyreload", any(ws_handler))
+        .with_state(state)
+}
+
+#[derive(Clone)]
+struct TrackerState {
+    rx: TrackerRx,
+}
+
+async fn broadcast_asset_change(mut tracker: AssetTracker, tx: TrackerTx) {
+    loop {
+        let event = tracker.track_change().await;
+        let _ = tx.send_replace(event);
+    }
+}
+
+async fn notfiy_reload(mut ws: WebSocket, mut rx: TrackerRx) {
+    while let Ok(()) = rx.changed().await {
+        {
+            let _event = rx.borrow_and_update();
+        }
+
+        let ws_msg = Message::Text("reload".to_string());
+        if let Err(e) = ws.send(ws_msg).await {
+            error!("failed to send message on web socket: {:?}", e);
+            return;
+        }
+    }
 }
 
 async fn serve(app: Router, addr: SocketAddr) {
@@ -61,16 +99,11 @@ async fn serve(app: Router, addr: SocketAddr) {
     axum::serve(listener, app).await.unwrap();
 }
 
-async fn ws_handler(ws: WebSocketUpgrade) -> impl IntoResponse {
+async fn ws_handler(
+    ws: WebSocketUpgrade,
+    State(TrackerState { rx }): State<TrackerState>,
+) -> impl IntoResponse {
     info!("ws upgrade");
 
-    ws.on_upgrade(move |socket| handle_socket(socket))
-}
-
-async fn handle_socket(mut socket: WebSocket) {
-    if socket.send(Message::Ping(vec![1, 2, 3])).await.is_ok() {
-        info!("Pinged ws client");
-    } else {
-        error!("Failed to ping ws client");
-    }
+    ws.on_upgrade(move |socket| notfiy_reload(socket, rx))
 }
