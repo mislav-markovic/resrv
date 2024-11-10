@@ -1,6 +1,6 @@
 use notify::{RecommendedWatcher, RecursiveMode, Watcher};
 use std::path::Path;
-use tracing::{debug, error, info};
+use tracing::{debug, error};
 
 const ASSET_TRACKER_BUFFER_SIZE: usize = 128;
 
@@ -22,17 +22,14 @@ impl AssetTracker {
         let rt = tokio::runtime::Handle::current();
         // event handler spawns a task that asynchrounsly pushes file change notification
         let mut watcher = notify::recommended_watcher(move |event| {
-            info!("enter event handler");
             let tx = event_tx.clone();
 
             match event {
                 Ok(event) if is_modification_even(&event) => {
-                    debug!("handling notify event: {:?}", event);
+                    debug!("handling notify event: {:?} for {:?}", event.kind, event.paths);
 
                     rt.spawn(async move {
-                        debug!("sending reload event");
                         tx.send(ReloadEvent::FileChange).await.unwrap();
-                        debug!("sent reload event");
                     });
                 }
                 Ok(event) => debug!("skipping event type {:?}", event.kind),

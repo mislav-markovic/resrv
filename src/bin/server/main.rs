@@ -37,9 +37,7 @@ async fn main() {
         .ok_or_eyre("failed to resolve url to socket addr")
         .unwrap();
 
-    info!("serve cfg: {:?}", cfg);
-
-    info!("starting asset tracker");
+    info!("cfg: {:?}", cfg);
     let _tracker = asset_tracker::AssetTracker::new_for_dir(&cfg.dir);
 
     serve(make_router(&cfg.dir), addr).await;
