@@ -1,6 +1,6 @@
 use notify::{RecommendedWatcher, RecursiveMode, Watcher};
 use std::path::Path;
-use tracing::{debug, error, info, warn};
+use tracing::{debug, error, info};
 
 const ASSET_TRACKER_BUFFER_SIZE: usize = 128;
 
@@ -26,8 +26,8 @@ impl AssetTracker {
             let tx = event_tx.clone();
 
             match event {
-                Ok(event) => {
-                    debug!("notify event: {:?}", event);
+                Ok(event) if is_modification_even(&event) => {
+                    debug!("handling notify event: {:?}", event);
 
                     rt.spawn(async move {
                         debug!("sending reload event");
@@ -35,6 +35,7 @@ impl AssetTracker {
                         debug!("sent reload event");
                     });
                 }
+                Ok(event) => debug!("skipping event type {:?}", event.kind),
                 Err(err) => {
                     error!("notify event error: {err:?}");
                 }
@@ -59,5 +60,16 @@ impl AssetTracker {
             .recv()
             .await
             .expect("asset tracker receiver should never see channel close error")
+    }
+}
+
+fn is_modification_even(event: &notify::Event) -> bool {
+    use notify::event::CreateKind as CK;
+    use notify::event::ModifyKind as MK;
+    use notify::EventKind as EK;
+
+    match event.kind {
+        EK::Create(CK::File) | EK::Modify(MK::Data(_) | MK::Name(_)) | EK::Remove(_) => true,
+        _ => false,
     }
 }
