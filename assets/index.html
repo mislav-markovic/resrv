@@ -12,21 +12,47 @@
 <body>
   <h1>Hello World</h1>
   <p>Lorem Ipsum</p>
+  <p>changed auto reload</p>
 
+  <script type="text/javascript">
+    console.log("version 2");
 
-  <script>
-    console.log("hello from js");
+    const supportsWebSockets = 'WebSocket' in window || 'MozWebSocket' in window;
 
-    console.log("opening ws");
-    const websocket = new WebSocket("ws://localhost:3001/notifyreload");
+    if (!supportsWebSockets) {
+      console.log("web sockets not supported, can not auto-reload via resrv server");
+    } else {
+      console.log("websockets supported!");
+      reloader();
+    }
 
-    websocket.onopen = (event) => {
-      console.log("ws open");
-    };
+    function reloader() {
+      console.log("It's loaded!")
 
-    websocket.onmessage = (event) => {
-      console.log("ws recv: " + event.data);
-    };
+      const protocol = window.location.protocol === 'http:' ? 'ws://' : 'wss://';
+      const address = protocol + window.location.host + '/notifyreload'
+      console.log(`address: ${address}`);
+      const websocket = new WebSocket(address);
+
+      websocket.onopen = (event) => {
+        console.log("ws open");
+      };
+
+      websocket.onmessage = (event) => {
+        const time = new Date().toLocaleString();
+        console.log(`[${time}] ws recv: ${event.data}`);
+
+        if (event.data == 'reload') {
+          // reload the current page
+          window.location.reload();
+
+          console.log(`after call to reload`);
+        } else {
+          console.log(`unknown ws event ${event.data}`);
+        }
+
+      };
+    }
 
   </script>
 </body>
