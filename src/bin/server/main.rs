@@ -17,7 +17,6 @@ use std::{
     net::{SocketAddr, ToSocketAddrs},
     path::Path,
     sync::{atomic::AtomicU32, Arc},
-    time::Duration,
 };
 use tower_http::{services::ServeDir, trace::TraceLayer};
 use tracing::{debug, error, info, warn};
@@ -57,7 +56,7 @@ type TrackerTx = tokio::sync::watch::Sender<ReloadEvent>;
 type TrackerRx = tokio::sync::watch::Receiver<ReloadEvent>;
 
 fn make_router(dir: &Path, rx: TrackerRx) -> Router {
-    let counter = Arc::new(AtomicU32::new(1));
+    let counter = Arc::new(AtomicU32::new(0));
     let state = TrackerState { rx, counter };
 
     Router::new()
@@ -89,14 +88,12 @@ async fn notfiy_reload(ws: WebSocket, mut rx: TrackerRx, id: u32) {
 
     let mut send_task = tokio::spawn(async move {
         while let Ok(()) = rx.changed().await {
-            tokio::time::sleep(Duration::from_millis(500)).await;
-
             let ws_msg = Message::Text("reload".to_string());
             if let Err(e) = ws_tx.send(ws_msg).await {
                 error!("failed to send message on web socket: {:?}", e);
                 break;
             } else {
-                info!("[{id}] sent reload event");
+                debug!("[{id}] sent reload event");
             }
         }
 
@@ -123,7 +120,7 @@ async fn notfiy_reload(ws: WebSocket, mut rx: TrackerRx, id: u32) {
 async fn serve(app: Router, addr: SocketAddr) {
     let listener = tokio::net::TcpListener::bind(addr).await.unwrap();
 
-    debug!("listening on {}", listener.local_addr().unwrap());
+    info!("listening on {}", listener.local_addr().unwrap());
 
     let app = app
         .layer(TraceLayer::new_for_http())
@@ -136,7 +133,6 @@ async fn ws_handler(
     ws: WebSocketUpgrade,
     State(TrackerState { rx, counter }): State<TrackerState>,
 ) -> impl IntoResponse {
-    debug!("ws upgrade");
     let counter = counter.fetch_add(1, std::sync::atomic::Ordering::Relaxed);
 
     ws.on_upgrade(move |socket| notfiy_reload(socket, rx, counter))
