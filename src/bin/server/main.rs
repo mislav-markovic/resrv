@@ -15,9 +15,10 @@ use resrv::{
 use std::{
     net::{SocketAddr, ToSocketAddrs},
     path::Path,
+    time::Duration,
 };
 use tower_http::{services::ServeDir, trace::TraceLayer};
-use tracing::{debug, error, info};
+use tracing::{debug, error, info, warn};
 use tracing_subscriber::{layer::SubscriberExt, util::SubscriberInitExt};
 
 #[tokio::main]
@@ -47,7 +48,7 @@ async fn main() {
     let tracker_task = tokio::spawn(broadcast_asset_change(tracker, tx));
 
     serve(make_router(&cfg.dir, rx), addr).await;
-    let _ = tracker_task.await;
+    let _track_result = tracker_task.await;
 }
 
 type TrackerTx = tokio::sync::watch::Sender<ReloadEvent>;
@@ -74,17 +75,24 @@ async fn broadcast_asset_change(mut tracker: AssetTracker, tx: TrackerTx) {
 }
 
 async fn notfiy_reload(mut ws: WebSocket, mut rx: TrackerRx) {
+    if let Ok(true) = rx.has_changed() {
+        debug!("discarding initial changed notification");
+        rx.mark_unchanged();
+    }
+
     while let Ok(()) = rx.changed().await {
-        {
-            let _event = rx.borrow_and_update();
-        }
+        tokio::time::sleep(Duration::from_millis(500)).await;
 
         let ws_msg = Message::Text("reload".to_string());
         if let Err(e) = ws.send(ws_msg).await {
             error!("failed to send message on web socket: {:?}", e);
             return;
+        } else {
+            info!("sent reload event");
         }
     }
+
+    warn!("stopping notify reload ws handler");
 }
 
 async fn serve(app: Router, addr: SocketAddr) {

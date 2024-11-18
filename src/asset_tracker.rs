@@ -26,7 +26,10 @@ impl AssetTracker {
 
             match event {
                 Ok(event) if is_modification_even(&event) => {
-                    debug!("handling notify event: {:?} for {:?}", event.kind, event.paths);
+                    debug!(
+                        "handling notify event: {:?} for {:?}",
+                        event.kind, event.paths
+                    );
 
                     rt.spawn(async move {
                         tx.send(ReloadEvent::FileChange).await.unwrap();
