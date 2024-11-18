@@ -1,0 +1,4 @@
+[jobs.reload-dev]
+command = ["just", "dev"]
+need_stdout = true
+on_change_strategy = "kill_then_restart"

@@ -111,7 +111,7 @@ async fn ws_handler(
     ws: WebSocketUpgrade,
     State(TrackerState { rx }): State<TrackerState>,
 ) -> impl IntoResponse {
-    info!("ws upgrade");
+    debug!("ws upgrade");
 
     ws.on_upgrade(move |socket| notfiy_reload(socket, rx))
 }

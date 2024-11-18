@@ -18,3 +18,7 @@ debug:
 # start server for dev mode with dir pointing to `./assets/` and serving on `localhost:3001`
 dev:
   RUST_LOG=debug cargo run --bin server -- --dir "./assets/" --url "localhost:3001"
+
+# start dev server that rebuilds and restarts on change
+watch:
+  bacon reload-dev
