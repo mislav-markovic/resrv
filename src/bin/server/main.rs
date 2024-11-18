@@ -4,7 +4,7 @@ use axum::{
         State, WebSocketUpgrade,
     },
     response::IntoResponse,
-    routing::any,
+    routing::{any, get},
     Router,
 };
 use eyre::OptionExt;
@@ -12,13 +12,14 @@ use futures::{SinkExt, StreamExt};
 use resrv::{
     asset_tracker::{self, AssetTracker, ReloadEvent},
     config,
+    serve_dir_reload::serve_dir_reloadable,
 };
 use std::{
     net::{SocketAddr, ToSocketAddrs},
     path::Path,
     sync::{atomic::AtomicU32, Arc},
 };
-use tower_http::{services::ServeDir, trace::TraceLayer};
+use tower_http::trace::TraceLayer;
 use tracing::{debug, error, info, warn};
 use tracing_subscriber::{layer::SubscriberExt, util::SubscriberInitExt};
 
@@ -26,9 +27,8 @@ use tracing_subscriber::{layer::SubscriberExt, util::SubscriberInitExt};
 async fn main() {
     tracing_subscriber::registry()
         .with(
-            tracing_subscriber::EnvFilter::try_from_default_env().unwrap_or_else(|_| {
-                format!("{}=debug,tower_http=debug", env!("CARGO_CRATE_NAME")).into()
-            }),
+            tracing_subscriber::EnvFilter::try_from_default_env()
+                .unwrap_or_else(|_| format!("{}=debug", env!("CARGO_CRATE_NAME")).into()),
         )
         .with(tracing_subscriber::fmt::layer())
         .init();
@@ -60,9 +60,15 @@ fn make_router(dir: &Path, rx: TrackerRx) -> Router {
     let state = TrackerState { rx, counter };
 
     Router::new()
-        .fallback_service(ServeDir::new(dir).append_index_html_on_directories(true))
         .route("/notifyreload", any(ws_handler))
+        .route(
+            "/foo",
+            get(|| async {
+                info!("hello from foo");
+            }),
+        )
         .with_state(state)
+        .merge(serve_dir_reloadable(&dir))
 }
 
 #[derive(Clone)]

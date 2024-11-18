@@ -6,13 +6,18 @@ edition = "2021"
 [dependencies]
 axum = { version = "0.8.0-alpha.1", features = ["macros", "ws"] }
 axum-extra = { version = "0.9.4", features = ["typed-header"] }
+bytes = "1.8.0"
 clap = { version = "4.5.20", features = ["derive"] }
 eyre = "0.6.12"
 futures = "0.3.31"
 futures-util = { version = "0.3.31", default-features = false, features = ["std", "sink"] }
 headers = "0.4.0"
+http = "1.1.0"
+http-body = "1.0.1"
+http-body-util = "0.1.2"
 notify = "7.0.0"
 tokio = { version = "1.41.0", features = ["full"] }
+tower = "0.5.1"
 tower-http = { version = "0.6.1", features = ["fs", "trace", "util"] }
 tracing = "0.1.40"
 tracing-subscriber = { version = "0.3.18", features = ["env-filter"] }
