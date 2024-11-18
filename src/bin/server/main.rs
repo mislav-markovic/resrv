@@ -8,6 +8,7 @@ use axum::{
     Router,
 };
 use eyre::OptionExt;
+use futures::{SinkExt, StreamExt};
 use resrv::{
     asset_tracker::{self, AssetTracker, ReloadEvent},
     config,
@@ -15,6 +16,7 @@ use resrv::{
 use std::{
     net::{SocketAddr, ToSocketAddrs},
     path::Path,
+    sync::{atomic::AtomicU32, Arc},
     time::Duration,
 };
 use tower_http::{services::ServeDir, trace::TraceLayer};
@@ -55,7 +57,9 @@ type TrackerTx = tokio::sync::watch::Sender<ReloadEvent>;
 type TrackerRx = tokio::sync::watch::Receiver<ReloadEvent>;
 
 fn make_router(dir: &Path, rx: TrackerRx) -> Router {
-    let state = TrackerState { rx };
+    let counter = Arc::new(AtomicU32::new(1));
+    let state = TrackerState { rx, counter };
+
     Router::new()
         .fallback_service(ServeDir::new(dir).append_index_html_on_directories(true))
         .route("/notifyreload", any(ws_handler))
@@ -65,6 +69,7 @@ fn make_router(dir: &Path, rx: TrackerRx) -> Router {
 #[derive(Clone)]
 struct TrackerState {
     rx: TrackerRx,
+    counter: Arc<AtomicU32>,
 }
 
 async fn broadcast_asset_change(mut tracker: AssetTracker, tx: TrackerTx) {
@@ -74,25 +79,45 @@ async fn broadcast_asset_change(mut tracker: AssetTracker, tx: TrackerTx) {
     }
 }
 
-async fn notfiy_reload(mut ws: WebSocket, mut rx: TrackerRx) {
+async fn notfiy_reload(ws: WebSocket, mut rx: TrackerRx, id: u32) {
     if let Ok(true) = rx.has_changed() {
-        debug!("discarding initial changed notification");
+        debug!("[{id}] discarding initial changed notification");
         rx.mark_unchanged();
     }
 
-    while let Ok(()) = rx.changed().await {
-        tokio::time::sleep(Duration::from_millis(500)).await;
+    let (mut ws_tx, mut ws_rx) = ws.split();
 
-        let ws_msg = Message::Text("reload".to_string());
-        if let Err(e) = ws.send(ws_msg).await {
-            error!("failed to send message on web socket: {:?}", e);
-            return;
-        } else {
-            info!("sent reload event");
+    let mut send_task = tokio::spawn(async move {
+        while let Ok(()) = rx.changed().await {
+            tokio::time::sleep(Duration::from_millis(500)).await;
+
+            let ws_msg = Message::Text("reload".to_string());
+            if let Err(e) = ws_tx.send(ws_msg).await {
+                error!("failed to send message on web socket: {:?}", e);
+                break;
+            } else {
+                info!("[{id}] sent reload event");
+            }
         }
-    }
 
-    warn!("stopping notify reload ws handler");
+        warn!("stopping notify reload ws sender");
+    });
+
+    let mut recv_task = tokio::spawn(async move {
+        while let Some(Ok(msg)) = ws_rx.next().await {
+            if let Message::Close(_close_frame_option) = msg {
+                warn!("[{id}] received close message");
+                break;
+            }
+        }
+    });
+
+    tokio::select! {
+        _tx_rv = (&mut send_task) => recv_task.abort(),
+        _rx_rv = (&mut recv_task) => send_task.abort()
+    };
+
+    info!("[{id}] ending notify reload handler");
 }
 
 async fn serve(app: Router, addr: SocketAddr) {
@@ -109,9 +134,10 @@ async fn serve(app: Router, addr: SocketAddr) {
 
 async fn ws_handler(
     ws: WebSocketUpgrade,
-    State(TrackerState { rx }): State<TrackerState>,
+    State(TrackerState { rx, counter }): State<TrackerState>,
 ) -> impl IntoResponse {
     debug!("ws upgrade");
+    let counter = counter.fetch_add(1, std::sync::atomic::Ordering::Relaxed);
 
-    ws.on_upgrade(move |socket| notfiy_reload(socket, rx))
+    ws.on_upgrade(move |socket| notfiy_reload(socket, rx, counter))
 }
