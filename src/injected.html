@@ -1,0 +1,27 @@
+<!-- Injected by resrv live-reload server -->
+<script type="text/javascript">
+  const supportsWebSockets = 'WebSocket' in window || 'MozWebSocket' in window;
+
+  if (!supportsWebSockets) {
+    console.log("websockets not supported, can not live-reload via resrv server");
+  } else {
+    console.log("websockets supported! starting live-reload");
+    reloader();
+  }
+
+  function reloader() {
+    const protocol = window.location.protocol === 'http:' ? 'ws://' : 'wss://';
+    const address = protocol + window.location.host + '/notifyreload'
+    console.log(`reload from: ${address}`);
+    const websocket = new WebSocket(address);
+
+    websocket.onmessage = (event) => {
+      if (event.data == 'reload') {
+        window.location.reload();
+      } else {
+        console.log(`unknown ws event ${event.data}`);
+
+      };
+    }
+  }
+</script>
