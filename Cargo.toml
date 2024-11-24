@@ -1,7 +1,18 @@
 [package]
 name = "resrv"
 version = "0.1.0"
+authors = ["Mislav Markovic <markovic.mislav@proton.me>"]
+description = """
+resrv serves assets from file directory and live-reloads them in browser on change.
+"""
+license = "MIT"
 edition = "2021"
+rust-version = "1.82"
+
+[[bin]]
+bench = false
+path = "src/bin/server/main.rs"
+name = "resrv"
 
 [dependencies]
 axum = { version = "0.8.0-alpha.1", features = ["macros", "ws"] }
