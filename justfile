@@ -2,23 +2,25 @@ alias b := build
 alias r := serve
 alias d := debug
 
+default_serve_dir := "./assets"
+default_serve_url := "localhost:3001"
+
 
 # build project
 build:
   cargo build
 
-# start the server that will serve assets
-serve: build
-  cargo run --bin server
+# start the resrv that will serve assets
+serve serve_dir=default_serve_dir serve_url=default_serve_url: build
+  cargo run --bin resrv -- --dir {{serve_dir}} --url {{serve_url}}
 
-# start server in debug mode
-debug:
-  RUST_LOG=debug cargo run --bin server
+# start resrv in debug mode
+debug serve_dir=default_serve_dir serve_url=default_serve_url:
+  RUST_LOG=debug cargo run --bin resrv -- --dir {{serve_dir}} --url {{serve_url}}
 
-# start server for dev mode with dir pointing to `./assets/` and serving on `localhost:3001`
-dev:
-  RUST_LOG=debug cargo run --bin server -- --dir "./assets/" --url "localhost:3001"
+# start resrv for dev mode with dir pointing to `./assets/` and serving on `localhost:3001`
+dev: (debug "./assets" "localhost:3001")
 
-# start dev server that rebuilds and restarts on change
+# start dev resrv that rebuilds and restarts on change
 watch:
   bacon reload-dev
